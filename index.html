@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Orbitune</title>
+<style>
+  :root{
+    --void:#060812;
+    --void-2:#0b0f22;
+    --panel:rgba(12,16,36,0.72);
+    --panel-border:rgba(255,180,87,0.20);
+    --star:#dfe2f7;
+    --star-dim:#7d84ad;
+    --sun:#ffb457;
+    --sun-core:#fff6dd;
+    --nebula:#9d8cf0;
+    --ring:#262c4d;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:var(--void); color:var(--star);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Rounded","Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{ position:relative; width:100vw; height:100vh; }
+
+  canvas#sky{
+    position:absolute; inset:0; display:block; width:100%; height:100%;
+    touch-action:manipulation; cursor:crosshair;
+  }
+
+  /* ---------- placard ---------- */
+  .placard{
+    position:absolute; top:26px; left:30px; pointer-events:none;
+    transition:opacity 0.9s ease;
+  }
+  .placard.faded{ opacity:0.32; }
+  .wordmark{
+    margin:0; font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:clamp(24px,3.6vw,36px); font-weight:600; letter-spacing:0.05em;
+    color:var(--sun-core);
+    text-shadow:0 0 18px rgba(255,180,87,0.45), 0 0 46px rgba(255,180,87,0.15);
+  }
+  .tagline{
+    margin:4px 0 0; font-family:ui-monospace,"SF Mono",Consolas,monospace;
+    font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--star-dim);
+  }
+  .hint{
+    margin:10px 0 0; font-family:ui-monospace,"SF Mono",Consolas,monospace;
+    font-size:11px; letter-spacing:0.04em; color:var(--star-dim); max-width:230px; line-height:1.5;
+  }
+
+  /* ---------- dock ---------- */
+  .dock{
+    position:absolute; left:50%; bottom:22px; transform:translate(-50%,0);
+    display:flex; align-items:stretch; gap:18px;
+    padding:12px 20px; border-radius:16px;
+    background:var(--panel); border:1px solid var(--panel-border);
+    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+    box-shadow:0 10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    opacity:0; transition:opacity 0.7s ease 0.15s, transform 0.7s ease 0.15s;
+  }
+  .dock.shown{ opacity:1; }
+  .group{ display:flex; flex-direction:column; justify-content:center; gap:6px; padding:0 4px; }
+  .group + .group{ border-left:1px solid var(--ring); padding-left:18px; }
+  .label{
+    font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:9px;
+    letter-spacing:0.16em; text-transform:uppercase; color:var(--star-dim);
+  }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:110px; height:16px; background:transparent; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{ height:3px; background:var(--ring); border-radius:2px; }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; margin-top:-5px; width:13px; height:13px; border-radius:50%;
+    background:var(--sun); box-shadow:0 0 8px rgba(255,180,87,0.7); cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{ height:3px; background:var(--ring); border-radius:2px; }
+  input[type=range]::-moz-range-thumb{
+    width:13px; height:13px; border:none; border-radius:50%; background:var(--sun);
+    box-shadow:0 0 8px rgba(255,180,87,0.7); cursor:pointer;
+  }
+
+  select{
+    background:var(--void-2); color:var(--star); border:1px solid var(--ring); border-radius:7px;
+    font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:12px; padding:5px 7px; cursor:pointer;
+  }
+  select:focus, input:focus, button:focus{ outline:2px solid var(--nebula); outline-offset:2px; }
+
+  button{
+    background:var(--void-2); color:var(--star); border:1px solid var(--ring); border-radius:7px;
+    font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:11px; letter-spacing:0.04em;
+    padding:6px 11px; cursor:pointer; transition:background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  button:hover{ background:#151b38; border-color:var(--sun); color:var(--sun-core); }
+  button.active{ border-color:var(--nebula); color:var(--nebula); }
+  .btn-row{ display:flex; gap:8px; align-items:center; }
+
+  /* ---------- start overlay ---------- */
+  .start{
+    position:absolute; inset:0; z-index:10; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(ellipse at 50% 45%, #0d1226 0%, var(--void) 70%);
+    transition:opacity 0.7s ease, visibility 0.7s ease;
+  }
+  .start.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .start h1{
+    margin:0; font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-weight:600; font-size:clamp(40px,8vw,72px); letter-spacing:0.05em; color:var(--sun-core);
+    text-shadow:0 0 30px rgba(255,180,87,0.5), 0 0 90px rgba(255,180,87,0.2);
+    text-wrap:balance;
+  }
+  .start p.tag{
+    margin:12px 0 40px; font-family:ui-monospace,"SF Mono",Consolas,monospace;
+    font-size:13px; letter-spacing:0.24em; text-transform:uppercase; color:var(--star-dim);
+  }
+  .start .prompt{
+    font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:12px;
+    letter-spacing:0.14em; text-transform:uppercase; color:var(--sun);
+    animation:pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:0.35;} 50%{opacity:1;} }
+  @media (prefers-reduced-motion: reduce){ .start .prompt{ animation:none; opacity:0.85; } }
+
+  @media (max-width:640px){
+    .dock{ gap:12px; padding:10px 14px; flex-wrap:wrap; max-width:92vw; justify-content:center; }
+    .group + .group{ padding-left:12px; }
+    input[type=range]{ width:84px; }
+    .placard{ top:16px; left:16px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="sky"></canvas>
+
+  <div class="placard" id="placard">
+    <p class="wordmark">Orbitune</p>
+    <p class="tagline">an orbital music box</p>
+    <p class="hint">Click open space to place a planet · Double-click a planet to remove it</p>
+  </div>
+
+  <div class="dock" id="dock">
+    <div class="group">
+      <span class="label">Tempo</span>
+      <input type="range" id="tempo" min="30" max="220" value="100">
+    </div>
+    <div class="group">
+      <span class="label">Scale</span>
+      <select id="scale">
+        <option value="pentatonic" selected>Pentatonic</option>
+        <option value="minor">Minor Pentatonic</option>
+        <option value="major">Major</option>
+        <option value="wholetone">Whole Tone</option>
+      </select>
+    </div>
+    <div class="group">
+      <span class="label">Instrument</span>
+      <div class="btn-row">
+        <button id="muteBtn" title="Mute">Sound On</button>
+        <button id="clearBtn" title="Remove all planets">Clear</button>
+        <button id="surpriseBtn" title="Add a random cluster">Surprise Me</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="start" id="start">
+    <h1>Orbitune</h1>
+    <p class="tag">an orbital music box</p>
+    <p class="prompt">click anywhere to begin</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var canvas = document.getElementById('sky');
+  var ctx = canvas.getContext('2d');
+  var startScreen = document.getElementById('start');
+  var placard = document.getElementById('placard');
+  var dock = document.getElementById('dock');
+  var tempoInput = document.getElementById('tempo');
+  var scaleSelect = document.getElementById('scale');
+  var muteBtn = document.getElementById('muteBtn');
+  var clearBtn = document.getElementById('clearBtn');
+  var surpriseBtn = document.getElementById('surpriseBtn');
+
+  // ---------- geometry state ----------
+  var W = 0, H = 0, DPR = Math.max(1, window.devicePixelRatio || 1);
+  var CX = 0, CY = 0, MIN_R = 68, MAX_R = 300;
+  var stars = [];
+
+  function resize(){
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    CX = W / 2; CY = H / 2;
+    MAX_R = Math.min(W, H) * 0.46;
+    var count = Math.round((W * H) / 5200);
+    stars = [];
+    for (var i = 0; i < count; i++){
+      stars.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 1.2 + 0.3,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.4 + Math.random() * 0.8
+      });
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- music theory ----------
+  var SCALES = {
+    pentatonic: [0,2,4,7,9],
+    minor:      [0,3,5,7,10],
+    major:      [0,2,4,5,7,9,11],
+    wholetone:  [0,2,4,6,8,10]
+  };
+  var ROOT = 110; // A2
+  var notesList = [];
+  function buildNotes(key){
+    var steps = SCALES[key] || SCALES.pentatonic;
+    var out = [];
+    for (var oct = 0; oct < 3; oct++){
+      for (var s = 0; s < steps.length; s++){
+        var semitone = oct * 12 + steps[s];
+        out.push(ROOT * Math.pow(2, semitone / 12));
+      }
+    }
+    out.sort(function(a,b){ return a - b; });
+    return out;
+  }
+  notesList = buildNotes('pentatonic');
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function lerp(a,b,t){ return a + (b - a) * t; }
+
+  // ---------- audio ----------
+  var audioCtx = null, masterGain = null, muted = false;
+  function ensureAudio(){
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.85;
+      masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playNote(freq, pan){
+    if (muted || !audioCtx) return;
+    var t0 = audioCtx.currentTime;
+    var decay = clamp(1.6 - freq / 900, 0.35, 1.5);
+
+    var osc = audioCtx.createOscillator();
+    osc.type = freq < 220 ? 'triangle' : 'sine';
+    osc.frequency.value = freq;
+
+    var shimmer = audioCtx.createOscillator();
+    shimmer.type = 'sine';
+    shimmer.frequency.value = freq * 2.006;
+
+    var filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = Math.min(freq * 8, 9000);
+    filter.Q.value = 0.6;
+
+    var gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(0.5, t0 + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0004, t0 + decay);
+
+    var gain2 = audioCtx.createGain();
+    gain2.gain.setValueAtTime(0, t0);
+    gain2.gain.linearRampToValueAtTime(0.10, t0 + 0.008);
+    gain2.gain.exponentialRampToValueAtTime(0.0004, t0 + decay * 0.65);
+
+    var merge = audioCtx.createGain();
+    osc.connect(filter); filter.connect(gain); gain.connect(merge);
+    shimmer.connect(gain2); gain2.connect(merge);
+
+    if (audioCtx.createStereoPanner){
+      var panner = audioCtx.createStereoPanner();
+      panner.pan.value = clamp(pan, -1, 1);
+      merge.connect(panner); panner.connect(masterGain);
+    } else {
+      merge.connect(masterGain);
+    }
+
+    osc.start(t0); shimmer.start(t0);
+    osc.stop(t0 + decay + 0.05); shimmer.stop(t0 + decay + 0.05);
+  }
+
+  // ---------- planets ----------
+  var planets = [];
+  var ripples = [];
+  var lineFlash = 0;
+  var TOP_ANGLE = -Math.PI / 2;
+  var tempo = 1.0;
+  var nextId = 1;
+
+  function periodForRadius(r){
+    // Kepler-ish: bigger orbit = slower, in seconds at tempo = 1
+    return 0.9 * Math.pow(r / MIN_R, 1.5);
+  }
+
+  function makePlanet(radius, angle){
+    var r = clamp(radius, MIN_R, MAX_R);
+    var t = (r - MIN_R) / (MAX_R - MIN_R);
+    var idx = Math.round((1 - t) * (notesList.length - 1));
+    var period = periodForRadius(r);
+    var hue = lerp(258, 30, t);
+    return {
+      id: nextId++,
+      r: r,
+      t: t,
+      angle: angle,
+      angularSpeed: (Math.PI * 2) / period,
+      size: lerp(4, 15, t),
+      hue: hue,
+      trail: [],
+      glow: 0,
+      x: CX + Math.cos(angle) * r,
+      y: CY + Math.sin(angle) * r
+    };
+  }
+
+  function noteForPlanet(p){
+    var idx = Math.round((1 - p.t) * (notesList.length - 1));
+    idx = clamp(idx, 0, notesList.length - 1);
+    return notesList[idx];
+  }
+
+  function addPlanetAt(clientX, clientY){
+    var dx = clientX - CX, dy = clientY - CY;
+    var radius = Math.hypot(dx, dy);
+    var angle = Math.atan2(dy, dx);
+    if (radius < MIN_R * 0.5) return; // don't stack on the sun
+    var p = makePlanet(radius, angle);
+    planets.push(p);
+    // immediate feedback pluck
+    playNote(noteForPlanet(p), 0);
+    ripples.push({ x: p.x, y: p.y, r: p.size, alpha: 0.9, hue: p.hue });
+  }
+
+  function removeNearest(clientX, clientY){
+    var best = -1, bestD = 22;
+    for (var i = 0; i < planets.length; i++){
+      var d = Math.hypot(planets[i].x - clientX, planets[i].y - clientY);
+      if (d < bestD){ bestD = d; best = i; }
+    }
+    if (best >= 0) planets.splice(best, 1);
+  }
+
+  function surprise(){
+    planets = [];
+    var n = 4 + Math.floor(Math.random() * 3);
+    for (var i = 0; i < n; i++){
+      var t = (i + 0.5) / n + (Math.random() * 0.12 - 0.06);
+      var radius = lerp(MIN_R * 1.3, MAX_R * 0.96, clamp(t,0,1));
+      var angle = Math.random() * Math.PI * 2;
+      var p = makePlanet(radius, angle);
+      planets.push(p);
+    }
+  }
+
+  // ---------- canvas interaction ----------
+  canvas.addEventListener('click', function(e){
+    addPlanetAt(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('dblclick', function(e){
+    e.preventDefault();
+    removeNearest(e.clientX, e.clientY);
+  });
+
+  // ---------- start overlay ----------
+  function begin(){
+    ensureAudio();
+    startScreen.classList.add('hidden');
+    dock.classList.add('shown');
+    surprise();
+    requestAnimationFrame(loop);
+    document.removeEventListener('touchend', beginTouch);
+  }
+  function beginTouch(e){ e.preventDefault(); begin(); }
+  startScreen.addEventListener('click', begin, { once: true });
+  startScreen.addEventListener('touchend', beginTouch, { once: true });
+
+  // fade the placard after the first planet is placed
+  canvas.addEventListener('click', function(){
+    placard.classList.add('faded');
+  }, { once: false });
+  var placardTimer = setTimeout(function(){ placard.classList.add('faded'); }, 9000);
+
+  // ---------- dock wiring ----------
+  tempoInput.addEventListener('input', function(){
+    tempo = tempoInput.value / 100;
+  });
+  scaleSelect.addEventListener('change', function(){
+    notesList = buildNotes(scaleSelect.value);
+  });
+  muteBtn.addEventListener('click', function(){
+    muted = !muted;
+    muteBtn.textContent = muted ? 'Sound Off' : 'Sound On';
+    muteBtn.classList.toggle('active', muted);
+  });
+  clearBtn.addEventListener('click', function(){
+    planets = []; ripples = [];
+  });
+  surpriseBtn.addEventListener('click', function(){
+    ensureAudio();
+    surprise();
+  });
+
+  // ---------- render loop ----------
+  var lastT = null;
+
+  function drawStars(time){
+    for (var i = 0; i < stars.length; i++){
+      var s = stars[i];
+      var a = 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(time * 0.0006 * s.speed + s.phase));
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(223,226,247,' + (a * 0.85).toFixed(3) + ')';
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawSun(time){
+    var pulse = 34 + Math.sin(time * 0.0011) * 2.2;
+    var grad = ctx.createRadialGradient(CX, CY, 0, CX, CY, pulse * 4.2);
+    grad.addColorStop(0, 'rgba(255,246,221,0.95)');
+    grad.addColorStop(0.18, 'rgba(255,180,87,0.55)');
+    grad.addColorStop(1, 'rgba(255,180,87,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(CX, CY, pulse * 4.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.fillStyle = '#fff6dd';
+    ctx.shadowColor = 'rgba(255,180,87,0.9)';
+    ctx.shadowBlur = 26;
+    ctx.arc(CX, CY, pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawStrikeLine(){
+    var alpha = 0.10 + lineFlash * 0.55;
+    ctx.strokeStyle = 'rgba(255,206,140,' + alpha.toFixed(3) + ')';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(CX, 0);
+    ctx.lineTo(CX, H);
+    ctx.stroke();
+    lineFlash *= 0.90;
+  }
+
+  function step(dt){
+    for (var i = 0; i < planets.length; i++){
+      var p = planets[i];
+      var prevAngle = p.angle;
+      p.angle += p.angularSpeed * tempo * dt;
+
+      var k1 = Math.floor((prevAngle - TOP_ANGLE) / (Math.PI * 2));
+      var k2 = Math.floor((p.angle - TOP_ANGLE) / (Math.PI * 2));
+      if (k2 !== k1){
+        var freq = noteForPlanet(p);
+        var pan = lerp(-0.6, 0.6, p.t);
+        playNote(freq, pan);
+        ripples.push({ x: p.x, y: p.y, r: p.size, alpha: 0.9, hue: p.hue });
+        p.glow = 1;
+        lineFlash = 1;
+      }
+      p.glow *= 0.90;
+
+      p.x = CX + Math.cos(p.angle) * p.r;
+      p.y = CY + Math.sin(p.angle) * p.r;
+      p.trail.push({ x: p.x, y: p.y });
+      if (p.trail.length > 16) p.trail.shift();
+    }
+
+    for (var j = ripples.length - 1; j >= 0; j--){
+      var rp = ripples[j];
+      rp.r += 55 * dt;
+      rp.alpha -= 1.7 * dt;
+      if (rp.alpha <= 0) ripples.splice(j, 1);
+    }
+  }
+
+  function drawOrbits(){
+    for (var i = 0; i < planets.length; i++){
+      var p = planets[i];
+      ctx.beginPath();
+      ctx.strokeStyle = 'hsla(' + p.hue + ',45%,60%,' + (0.10 + p.glow * 0.25).toFixed(3) + ')';
+      ctx.lineWidth = 1;
+      ctx.arc(CX, CY, p.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function drawPlanets(){
+    for (var i = 0; i < planets.length; i++){
+      var p = planets[i];
+
+      // trail
+      for (var k = 0; k < p.trail.length; k++){
+        var pt = p.trail[k];
+        var a = (k / p.trail.length) * 0.35;
+        ctx.beginPath();
+        ctx.fillStyle = 'hsla(' + p.hue + ',80%,70%,' + a.toFixed(3) + ')';
+        ctx.arc(pt.x, pt.y, p.size * 0.35 * (k / p.trail.length), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      var scale = 1 + p.glow * 0.5;
+      ctx.beginPath();
+      ctx.fillStyle = 'hsla(' + p.hue + ',85%,72%,1)';
+      ctx.shadowColor = 'hsla(' + p.hue + ',90%,65%,0.9)';
+      ctx.shadowBlur = 10 + p.glow * 18;
+      ctx.arc(p.x, p.y, p.size * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  function drawRipples(){
+    for (var i = 0; i < ripples.length; i++){
+      var rp = ripples[i];
+      ctx.beginPath();
+      ctx.strokeStyle = 'hsla(' + rp.hue + ',90%,75%,' + Math.max(rp.alpha, 0).toFixed(3) + ')';
+      ctx.lineWidth = 1.4;
+      ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function loop(time){
+    if (lastT === null) lastT = time;
+    var dt = Math.min((time - lastT) / 1000, 0.05);
+    lastT = time;
+
+    ctx.fillStyle = '#060812';
+    ctx.fillRect(0, 0, W, H);
+
+    drawStars(time);
+    drawOrbits();
+    drawStrikeLine();
+    drawSun(time);
+    step(dt);
+    drawRipples();
+    drawPlanets();
+
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>
